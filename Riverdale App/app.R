@@ -62,7 +62,7 @@ ui <- fluidPage(
 server <- function(input, output) {
   output$riverdalelogo <- renderImage({
       return(list(
-        src = "/riverdale.png",
+        src = "riverdale.png",
         contentType = "image/png",
         alt = "riverdale"
       ))
@@ -75,13 +75,13 @@ server <- function(input, output) {
     
     if (input$sp == "Episode 8") {
       return(list(
-        src = "/Riverdale App/ep8sentiment.png",
+        src = "ep8sentiment.png",
         contentType = "image/png",
         alt = "Ep 8"
       ))
     } else if (input$sp == "Episode 9") {
       return(list(
-        src = "/Riverdale App/ep9sentiment.png",
+        src = "ep9sentiment.png",
         filetype = "image/png",
         alt = "Ep 9"
       ))
@@ -95,13 +95,13 @@ server <- function(input, output) {
     
     if (input$wc == "Episode 8") {
       return(list(
-        src = "/Riverdale App/ep8 wordcloud.png",
+        src = "ep8 wordcloud.png",
         contentType = "image/png",
         alt = "Ep 8"
       ))
     } else if (input$wc == "Episode 9") {
       return(list(
-        src = "/Riverdale App/ep9 wordcloud.png",
+        src = "ep9 wordcloud.png",
         filetype = "image/png",
         alt = "Ep 9"
       ))
@@ -115,13 +115,13 @@ server <- function(input, output) {
     
     if (input$e == "Episode 8") {
       return(list(
-        src = "/Riverdale App/ep8 emojis.png",
+        src = "ep8 emojis.png",
         contentType = "image/png",
         alt = "Ep 8"
       ))
     } else if (input$e == "Episode 9") {
       return(list(
-        src = "/Riverdale App/ep9 emojis.png",
+        src = "ep9 emojis.png",
         filetype = "image/png",
         alt = "Ep 9"
       ))

@@ -1,0 +1,12 @@
+name: riverdaleapp
+title: RiverdaleApp
+username:
+account: lizmorris
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 250096
+bundleId: 1141971
+url: https://lizmorris.shinyapps.io/riverdaleapp/
+when: 1513650734.23034
+asMultiple: FALSE
+asStatic: FALSE
