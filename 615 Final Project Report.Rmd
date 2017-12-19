@@ -1,0 +1,287 @@
+---
+title: "615 Final Project: Riverdale Twitter Analysis"
+author: "Elizabeth Morris"
+date: "12/14/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(devtools)
+library(twitteR)
+library(tidyverse)
+library(lubridate)
+library(reshape2)
+library(wordcloud)
+library(tidytext)
+library(splitstackshape)
+library(sp)
+library(RgoogleMaps)
+library(ggmap)
+library(maptools)
+library(datasets)
+library(tigris)
+```
+
+#Overview
+Riverdale is a television show on the CW network that airs on Wednesday nights from 8-9 pm. The target audience of the show is teenagers and young adults. Because of the target age range, many fans of the show are very vocal about their opinions on Twitter. I will compare the tweets using the hashtag #Riverdale that were posted during and shortly after the episode aired for two episodes.
+
+```{r, echo = FALSE}
+api_key <- 	"tJ7Qi1tkLuYT8anxOaBFFvTKS"
+api_secret <- "dDleLZgkP0MZFUCCPpDZa9U2p4X6MlEdKrUNWyd8BuzxjFZwVz"
+access_token <- "927638854445752328-HEwVdwvOSpU74b70hpH0N7u6ZXYk0v6"
+access_token_secret <- "BL6bj76Q7VriLSqAP2vQIOvl1bo8MJnEPwHkJvtlGjIWU"
+
+setup_twitter_oauth(api_key, api_secret, access_token, access_token_secret)
+```
+
+
+
+```{r, echo=FALSE}
+#Because I needed to collect tweets at a specific time, for my analysis I will use CSV files that contain tweets previously collected. However, the following code is what I used to create these CSV files.
+set.seed(7659) 
+ht <- '#Riverdale' 
+tweets.raw <- searchTwitter("Riverdale -filter:retweets", n = 10000, lang = 'en')
+df <- twListToDF(strip_retweets(tweets.raw, strip_manual = TRUE, strip_mt = TRUE))
+df$hashtag <- ht
+df$created <- as.POSIXlt(df$created)
+df$text <- iconv(df$text, 'latin1', 'ASCII', 'byte')
+df$url <- paste0('https://twitter.com/', df$screenName, '/status/', df$id)
+names(df)[names(df) == 'retweetCount'] <- 'retweets'
+df.a <- subset(df, select = c(text, created, latitude, longitude, hashtag))
+nrow(df.a)
+head(df.a)
+tweets <- df
+tweets$z <- 1
+tweets$created <- as.POSIXlt(tweets$created)
+nrow(tweets)
+min(tweets$created)
+max(tweets$created)
+median(tweets$created)
+df.a$latitude <- as.integer(df.a$latitude)
+df.a$longitude <- as.integer(df.a$longitude)
+write.csv(df.a, "riverdale_tweets.csv")
+
+```
+
+#Map
+
+For whatever reason, very few tweets about this show contain location information, so it is difficult to get a sense of where people are tweeting about it. The following map shows the locations of the tweets that do contain location information.
+
+```{r, echo= FALSE, message=FALSE, warning=FALSE}
+qmplot(longitude, latitude, data = df.a, 
+       colour = I('red'))
+```
+
+#Sentiment Analysis
+I will use sentiment analysis and word clouds to compare what people were talking about in tweets about the two episodes.
+
+##Episode 8
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+#sentiment analysis
+ep8tweets <- read.csv("riverdale_tweets_ep8.csv")
+ep8text <- ep8tweets %>% select(text)
+
+ep8text <- data.frame(lapply(ep8text, as.character), stringsAsFactors = FALSE)
+ep8text <- reshape2::melt(ep8text)
+ep8text <- ep8text %>% unnest_tokens(word, text)
+ep8text %>% 
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100)) 
+
+ep8text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                   max.words = 100)
+
+ep8text <- ep8text %>%
+  anti_join(stop_words) 
+
+ep8text %>%
+  count(word, sort = TRUE) 
+
+nrcjoy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+ep8_text_sentiment_stat <- ep8text %>%
+  inner_join(nrcjoy) %>%
+  count(word, sort = TRUE)
+
+bing_word_counts8 <- ep8text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts8
+
+bing_word_counts8 %>%
+  group_by(sentiment) %>%
+  top_n(20) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+
+```
+
+The first word cloud does not really give us much interesting information, as many of the "words" are the name of the show, part of a hyperlink, or part of the code for an emoji. The positive/negative word cloud and sentiment analysis are a bit more telling. We can see that the most common negative words used in tweets about this episode are "mad" and "broke". This episode ended in the two main couples on the show breaking up, which explains why "broke" is used so often and is also probably what people were mad about. Other common words are various expletives. By far the most common positive word used is "love" -- most likely people saying that they love the show, episode, a particular character, or a plot line. One word that seems like it may be out of place is the word "blossom". This word is likely on the list because it is the last name of one of the main characters.
+
+##Episode 9
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+ep9tweets <- read.csv("riverdale_tweets_ep9.csv")
+
+ep9text <- ep9tweets %>% select(text)
+
+ep9text <- data.frame(lapply(ep9text, as.character), stringsAsFactors = FALSE)
+ep9text <- reshape2::melt(ep9text)
+ep9text <- ep9text %>% unnest_tokens(word, text)
+ep9text %>% 
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100)) 
+
+ep9text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                   max.words = 100)
+
+ep9text <- ep9text %>%
+  anti_join(stop_words) 
+
+ep9text %>%
+  count(word, sort = TRUE) 
+
+nrcjoy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+ep9_text_sentiment_stat <- ep9text %>%
+  inner_join(nrcjoy) %>%
+  count(word, sort = TRUE)
+
+bing_word_counts9 <- ep9text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts9
+
+bing_word_counts9 %>%
+  group_by(sentiment) %>%
+  top_n(20) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+
+```
+
+Because this episode was a mid-season finale, many of the negative words used (in particular "ugh" and "hate") are most likely a reaction to having to wait a while for the next episode. Additionally, this episode revealed the identity of a killer that had been part of a recurring plotline all season-- this is most likely the reason for the words "crazy, "confused", and "twist". The word dark is most likely due to a potential allusion to one of the main characters taking a dark turn in the episode's final moments. The positive words for this episode are not very different from those used in the previous episode. 
+
+#Emoji Analysis
+Because the target demographic of this show is younger, a lot of viewers use emojis in their tweets about the show. I will compare emojis used to tweet about the two episodes to see how they are reflective of the content of the episodes.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+#i used code from anahita's lecture to perform emoji analysis 
+emojianalysis <- function(fnames){
+fnames <- paste0(fnames, '.csv'); df <- read.csv(fnames)
+df$username <- substr(substr(df$url, 21, nchar(as.character(df$url))), 1, nchar(substr(df$url, 21, nchar(as.character(df$url))))-26);
+tweets.full <- df; tweets.full$X <- NULL; tweets.full$z <- 1; 
+#### sanity checking
+tweets.full$created <- as.POSIXct(tweets.full$created); min(tweets.full$created); max(tweets.full$created); median(tweets.full$created); nrow(tweets.full); length(unique(tweets.full$username))
+## dedupe dataset by url
+tweets.dupes <- tweets.full[duplicated(tweets.full$url), ]; nrow(tweets.full); nrow(tweets.dupes); # test <- subset(tweets.full, url %in% tweets.dupes$url); test <- test[with(test, order(url)), ];
+tweets <- tweets.full[!duplicated(tweets.full$url), ]; tweets <- arrange(tweets, url); row.names(tweets) <- NULL; tweets$tweetid <- as.numeric(row.names(tweets)); nrow(tweets);
+tweets.final <- tweets;
+## dedupe dataset by username
+# tweets.dupes <- tweets.full[duplicated(tweets.full$username), ]; nrow(tweets.full); nrow(tweets.dupes); # test <- subset(tweets, url %in% tweets.dupes$url); test <- test[with(test, order(url)), ];
+# tweets <- tweets.full[!duplicated(tweets.full$username), ]; tweets <- arrange(tweets, url); row.names(tweets) <- NULL; tweets$tweetid <- as.numeric(row.names(tweets)); nrow(tweets);
+
+#### READ IN EMOJI DICTIONARIES
+emdict.la <- read.csv('emoticon_conversion_noGraphic.csv', header = F); #Lauren Ancona; https://github.com/laurenancona/twimoji/tree/master/twitterEmojiProject
+emdict.la <- emdict.la[-1, ]; row.names(emdict.la) <- NULL; names(emdict.la) <- c('unicode', 'bytes', 'name'); emdict.la$emojiid <- row.names(emdict.la);
+emdict.jpb <- read.csv('emDict.csv', header = F) #Jessica Peterka-Bonetta; http://opiateforthemass.es/articles/emoticons-in-R/
+emdict.jpb <- emdict.jpb[-1, ]; row.names(emdict.jpb) <- NULL; names(emdict.jpb) <- c('name', 'bytes', 'rencoding'); emdict.jpb$name <- tolower(emdict.jpb$name);
+emdict.jpb$bytes <- NULL;
+## merge dictionaries
+emojis <- merge(emdict.la, emdict.jpb, by = 'name');  emojis$emojiid <- as.numeric(emojis$emojiid); emojis <- arrange(emojis, emojiid);
+
+###### FIND TOP EMOJIS FOR A GIVEN SUBSET OF THE DATA
+tweets <- tweets.final;
+# tweets <- subset(tweets.final, hashtag %in% c('#womensmarch'));
+## create full tweets by emojis matrix
+df.s <- matrix(NA, nrow = nrow(tweets), ncol = ncol(emojis)); 
+system.time(df.s <- sapply(emojis$rencoding, regexpr, tweets$text, ignore.case = T, useBytes = T));
+rownames(df.s) <- 1:nrow(df.s); colnames(df.s) <- 1:ncol(df.s); df.t <- data.frame(df.s); df.t$tweetid <- tweets$tweetid;
+# merge in hashtag data from original tweets dataset
+df.a <- subset(tweets, select = c(tweetid, hashtag)); 
+df.u <- merge(df.t, df.a, by = 'tweetid'); df.u$z <- 1; df.u <- arrange(df.u, tweetid); 
+tweets.emojis.matrix <- df.u;
+## create emoji count dataset
+df <- subset(tweets.emojis.matrix)[, c(2:843)]; count <- colSums(df > -1);
+emojis.m <- cbind(count, emojis); emojis.m <- arrange(emojis.m, desc(count));
+emojis.count <- subset(emojis.m, count > 1); emojis.count$dens <- round(1000 * (emojis.count$count / nrow(tweets)), 1); emojis.count$dens.sm <- (emojis.count$count + 1) / (nrow(tweets) + 1);
+emojis.count$rank <- as.numeric(row.names(emojis.count));
+emojis.count.p <- subset(emojis.count, select = c(name, dens, count, rank));
+# print summary stats
+subset(emojis.count.p, rank <= 10);
+num.tweets <- nrow(tweets); df.t <- rowSums(tweets.emojis.matrix[, c(2:843)] > -1); num.tweets.with.emojis <- length(df.t[df.t > 0]); num.emojis <- sum(emojis.count$count);
+min(tweets$created); max(tweets$created); median(tweets$created);
+num.tweets; num.tweets.with.emojis; round(100 * (num.tweets.with.emojis / num.tweets), 1); num.emojis; nrow(emojis.count);
+
+##### MAKE BAR CHART OF TOP EMOJIS IN NEW DATASET
+df.plot <- subset(emojis.count.p, rank <= 10); xlab <- 'Rank'; ylab <- 'Overall Frequency (per 1,000 Tweets)';
+setwd('/Users/Liz/Documents/BU/Fall 2017/615/Projects/Final Project/emojis');
+df.plot <- arrange(df.plot, name);
+imgs <- lapply(paste0(df.plot$name, '.png'), png::readPNG)
+g <- lapply(imgs, grid::rasterGrob);
+k <- 0.20 * (10/nrow(df.plot)) * max(df.plot$dens); df.plot$xsize <- k; df.plot$ysize <- k; #df.plot$xsize <- k * (df.plot$dens / max(df.plot$dens)); df.plot$ysize <- k * (df.plot$dens / max(df.plot$dens));
+df.plot <- arrange(df.plot, name);
+g1 <- ggplot(data = df.plot, aes(x = rank, y = dens)) +
+  geom_bar(stat = 'identity', fill = 'dodgerblue4') +
+  xlab(xlab) + ylab(ylab) +
+  mapply(function(x, y, i) {
+    annotation_custom(g[[i]], xmin = x-0.5*df.plot$xsize[i], xmax = x+0.5*df.plot$xsize[i], 
+                      ymin = y-0.5*df.plot$ysize[i], ymax = y+0.5*df.plot$ysize[i])},
+    df.plot$rank, df.plot$dens, seq_len(nrow(df.plot))) +
+  scale_x_continuous(expand = c(0, 0), breaks = seq(1, nrow(df.plot), 1), labels = seq(1, nrow(df.plot), 1)) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1.10 * max(df.plot$dens))) +
+  theme(panel.grid.minor.y = element_blank(),
+        axis.title.x = element_text(size = 10), axis.title.y = element_text(size = 14), 
+        axis.text.x  = element_text(size = 8, colour = 'black'), axis.text.y  = element_text(size = 8, colour = 'black'));
+g1
+return (g1)
+}
+
+```
+
+##Episode 8
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+emojianalysis('riverdale_tweets_ep8')
+
+```
+
+Half of the emojis used during this episode show some kind of distress-- as with the sentiment analysis, this could be due to the breakups at the end of the episode. The snake is most likely a reference to a gang on the show called Serpents, which played a large role in this episode.
+
+##Episode 9
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+emojianalysis('riverdale_tweets_ep9')
+
+```
+As with the previous episode, the crying emoji is the most commonly used. However, as a whole the emojis lean more positive, because the episode was not quite as sad as the previous episode as one of the breakups that viewers found particularly devastating got back together at the end of this episode.
+
+#Conclusions
+As one would expect, both the text and emojis used in tweets about the show Riverdale change from week to week and are reflective of the content of the episodes. This meams that people's tweets using the show's hashtag are less about the show in general and more about the specific episodes that people are watching.
+
